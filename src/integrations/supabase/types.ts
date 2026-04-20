@@ -94,6 +94,56 @@ export type Database = {
           },
         ]
       }
+      contributions: {
+        Row: {
+          comments_count: number
+          created_at: string
+          group_id: string
+          id: string
+          last_computed_at: string
+          score: number
+          subtasks_completed: number
+          tasks_completed: number
+          tasks_late: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          comments_count?: number
+          created_at?: string
+          group_id: string
+          id?: string
+          last_computed_at?: string
+          score?: number
+          subtasks_completed?: number
+          tasks_completed?: number
+          tasks_late?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          comments_count?: number
+          created_at?: string
+          group_id?: string
+          id?: string
+          last_computed_at?: string
+          score?: number
+          subtasks_completed?: number
+          tasks_completed?: number
+          tasks_late?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "contributions_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "groups"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       groups: {
         Row: {
           created_at: string
@@ -288,6 +338,17 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      compute_contributions: {
+        Args: { _group_id: string }
+        Returns: {
+          comments_count: number
+          score: number
+          subtasks_completed: number
+          tasks_completed: number
+          tasks_late: number
+          user_id: string
+        }[]
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
