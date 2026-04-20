@@ -338,6 +338,18 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      behavior_insights: {
+        Args: { _group_id: string; _lookback_days?: number }
+        Returns: {
+          days_since_last_action: number
+          flags: string[]
+          late_ratio: number
+          tasks_completed: number
+          tasks_late: number
+          total_actions: number
+          user_id: string
+        }[]
+      }
       compute_contributions: {
         Args: { _group_id: string }
         Returns: {
