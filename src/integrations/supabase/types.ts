@@ -14,6 +14,86 @@ export type Database = {
   }
   public: {
     Tables: {
+      activity_logs: {
+        Row: {
+          action: Database["public"]["Enums"]["activity_action"]
+          actor_id: string | null
+          created_at: string
+          details: Json
+          group_id: string
+          id: string
+          task_id: string | null
+        }
+        Insert: {
+          action: Database["public"]["Enums"]["activity_action"]
+          actor_id?: string | null
+          created_at?: string
+          details?: Json
+          group_id: string
+          id?: string
+          task_id?: string | null
+        }
+        Update: {
+          action?: Database["public"]["Enums"]["activity_action"]
+          actor_id?: string | null
+          created_at?: string
+          details?: Json
+          group_id?: string
+          id?: string
+          task_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "activity_logs_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "groups"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "activity_logs_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "tasks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      comments: {
+        Row: {
+          author_id: string
+          body: string
+          created_at: string
+          id: string
+          task_id: string
+          updated_at: string
+        }
+        Insert: {
+          author_id: string
+          body: string
+          created_at?: string
+          id?: string
+          task_id: string
+          updated_at?: string
+        }
+        Update: {
+          author_id?: string
+          body?: string
+          created_at?: string
+          id?: string
+          task_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "comments_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "tasks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       groups: {
         Row: {
           created_at: string
@@ -96,6 +176,44 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      subtasks: {
+        Row: {
+          completed: boolean
+          created_at: string
+          created_by: string
+          id: string
+          task_id: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          completed?: boolean
+          created_at?: string
+          created_by: string
+          id?: string
+          task_id: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          completed?: boolean
+          created_at?: string
+          created_by?: string
+          id?: string
+          task_id?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "subtasks_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "tasks"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       tasks: {
         Row: {
@@ -181,8 +299,17 @@ export type Database = {
         Args: { _group_id: string; _user_id: string }
         Returns: boolean
       }
+      task_group_id: { Args: { _task_id: string }; Returns: string }
     }
     Enums: {
+      activity_action:
+        | "task_created"
+        | "task_status_changed"
+        | "task_assigned"
+        | "task_deleted"
+        | "comment_added"
+        | "subtask_created"
+        | "subtask_completed"
       app_role: "leader" | "member"
       task_status: "not_started" | "in_progress" | "completed"
     }
@@ -312,6 +439,15 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      activity_action: [
+        "task_created",
+        "task_status_changed",
+        "task_assigned",
+        "task_deleted",
+        "comment_added",
+        "subtask_created",
+        "subtask_completed",
+      ],
       app_role: ["leader", "member"],
       task_status: ["not_started", "in_progress", "completed"],
     },
