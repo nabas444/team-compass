@@ -171,6 +171,66 @@ export type Database = {
         }
         Relationships: []
       }
+      meeting_notes: {
+        Row: {
+          action_items: Json
+          created_at: string
+          created_by: string
+          group_id: string
+          id: string
+          key_points: Json
+          source_from: string | null
+          source_to: string | null
+          summary: string
+          task_id: string | null
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          action_items?: Json
+          created_at?: string
+          created_by: string
+          group_id: string
+          id?: string
+          key_points?: Json
+          source_from?: string | null
+          source_to?: string | null
+          summary: string
+          task_id?: string | null
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          action_items?: Json
+          created_at?: string
+          created_by?: string
+          group_id?: string
+          id?: string
+          key_points?: Json
+          source_from?: string | null
+          source_to?: string | null
+          summary?: string
+          task_id?: string | null
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "meeting_notes_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "groups"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meeting_notes_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "tasks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       memberships: {
         Row: {
           created_at: string
@@ -199,6 +259,54 @@ export type Database = {
             columns: ["group_id"]
             isOneToOne: false
             referencedRelation: "groups"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      messages: {
+        Row: {
+          author_id: string
+          body: string
+          created_at: string
+          edited_at: string | null
+          group_id: string
+          id: string
+          task_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          author_id: string
+          body: string
+          created_at?: string
+          edited_at?: string | null
+          group_id: string
+          id?: string
+          task_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          author_id?: string
+          body?: string
+          created_at?: string
+          edited_at?: string | null
+          group_id?: string
+          id?: string
+          task_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "messages_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "groups"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "messages_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "tasks"
             referencedColumns: ["id"]
           },
         ]
@@ -261,6 +369,73 @@ export type Database = {
             columns: ["task_id"]
             isOneToOne: false
             referencedRelation: "tasks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      task_suggestions: {
+        Row: {
+          created_at: string
+          created_task_id: string | null
+          group_id: string
+          id: string
+          message_id: string
+          resolved_at: string | null
+          resolved_by: string | null
+          status: Database["public"]["Enums"]["suggestion_status"]
+          suggested_assignee: string | null
+          suggested_deadline: string | null
+          suggested_title: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_task_id?: string | null
+          group_id: string
+          id?: string
+          message_id: string
+          resolved_at?: string | null
+          resolved_by?: string | null
+          status?: Database["public"]["Enums"]["suggestion_status"]
+          suggested_assignee?: string | null
+          suggested_deadline?: string | null
+          suggested_title: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_task_id?: string | null
+          group_id?: string
+          id?: string
+          message_id?: string
+          resolved_at?: string | null
+          resolved_by?: string | null
+          status?: Database["public"]["Enums"]["suggestion_status"]
+          suggested_assignee?: string | null
+          suggested_deadline?: string | null
+          suggested_title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "task_suggestions_created_task_id_fkey"
+            columns: ["created_task_id"]
+            isOneToOne: false
+            referencedRelation: "tasks"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "task_suggestions_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "groups"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "task_suggestions_message_id_fkey"
+            columns: ["message_id"]
+            isOneToOne: false
+            referencedRelation: "messages"
             referencedColumns: ["id"]
           },
         ]
@@ -387,6 +562,7 @@ export type Database = {
         | "task_suggested"
         | "meeting_notes_created"
       app_role: "leader" | "member"
+      suggestion_status: "pending" | "accepted" | "dismissed"
       task_status: "not_started" | "in_progress" | "completed"
     }
     CompositeTypes: {
@@ -528,6 +704,7 @@ export const Constants = {
         "meeting_notes_created",
       ],
       app_role: ["leader", "member"],
+      suggestion_status: ["pending", "accepted", "dismissed"],
       task_status: ["not_started", "in_progress", "completed"],
     },
   },
