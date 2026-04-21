@@ -383,6 +383,9 @@ export type Database = {
         | "comment_added"
         | "subtask_created"
         | "subtask_completed"
+        | "message_sent"
+        | "task_suggested"
+        | "meeting_notes_created"
       app_role: "leader" | "member"
       task_status: "not_started" | "in_progress" | "completed"
     }
@@ -520,6 +523,9 @@ export const Constants = {
         "comment_added",
         "subtask_created",
         "subtask_completed",
+        "message_sent",
+        "task_suggested",
+        "meeting_notes_created",
       ],
       app_role: ["leader", "member"],
       task_status: ["not_started", "in_progress", "completed"],
