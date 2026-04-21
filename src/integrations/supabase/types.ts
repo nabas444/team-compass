@@ -59,6 +59,50 @@ export type Database = {
           },
         ]
       }
+      collaboration_snapshots: {
+        Row: {
+          computed_at: string
+          cross_comments: number
+          group_id: string
+          id: string
+          lookback_days: number
+          pair_score: number
+          shared_tasks: number
+          user_a: string
+          user_b: string
+        }
+        Insert: {
+          computed_at?: string
+          cross_comments: number
+          group_id: string
+          id?: string
+          lookback_days: number
+          pair_score: number
+          shared_tasks: number
+          user_a: string
+          user_b: string
+        }
+        Update: {
+          computed_at?: string
+          cross_comments?: number
+          group_id?: string
+          id?: string
+          lookback_days?: number
+          pair_score?: number
+          shared_tasks?: number
+          user_a?: string
+          user_b?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "collaboration_snapshots_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "groups"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       comments: {
         Row: {
           author_id: string
@@ -170,6 +214,53 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      leader_suggestions_snapshots: {
+        Row: {
+          computed_at: string
+          consistency_score: number
+          contribution_score: number
+          coordination_score: number
+          group_id: string
+          id: string
+          lookback_days: number
+          rank: number
+          total_score: number
+          user_id: string
+        }
+        Insert: {
+          computed_at?: string
+          consistency_score: number
+          contribution_score: number
+          coordination_score: number
+          group_id: string
+          id?: string
+          lookback_days: number
+          rank: number
+          total_score: number
+          user_id: string
+        }
+        Update: {
+          computed_at?: string
+          consistency_score?: number
+          contribution_score?: number
+          coordination_score?: number
+          group_id?: string
+          id?: string
+          lookback_days?: number
+          rank?: number
+          total_score?: number
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "leader_suggestions_snapshots_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "groups"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       meeting_notes: {
         Row: {
@@ -487,6 +578,53 @@ export type Database = {
           },
         ]
       }
+      team_health_snapshots: {
+        Row: {
+          activity_score: number
+          communication_score: number
+          computed_at: string
+          created_at: string
+          deadline_score: number
+          group_id: string
+          health_score: number
+          id: string
+          lookback_days: number
+          member_count: number
+        }
+        Insert: {
+          activity_score: number
+          communication_score: number
+          computed_at?: string
+          created_at?: string
+          deadline_score: number
+          group_id: string
+          health_score: number
+          id?: string
+          lookback_days: number
+          member_count: number
+        }
+        Update: {
+          activity_score?: number
+          communication_score?: number
+          computed_at?: string
+          created_at?: string
+          deadline_score?: number
+          group_id?: string
+          health_score?: number
+          id?: string
+          lookback_days?: number
+          member_count?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "team_health_snapshots_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "groups"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_roles: {
         Row: {
           created_at: string
@@ -525,6 +663,16 @@ export type Database = {
           user_id: string
         }[]
       }
+      compute_collaboration_pairs: {
+        Args: { _group_id: string; _lookback_days?: number }
+        Returns: {
+          cross_comments: number
+          pair_score: number
+          shared_tasks: number
+          user_a: string
+          user_b: string
+        }[]
+      }
       compute_contributions: {
         Args: { _group_id: string }
         Returns: {
@@ -534,6 +682,27 @@ export type Database = {
           tasks_completed: number
           tasks_late: number
           user_id: string
+        }[]
+      }
+      compute_leader_suggestions: {
+        Args: { _group_id: string; _lookback_days?: number }
+        Returns: {
+          consistency_score: number
+          contribution_score: number
+          coordination_score: number
+          rank: number
+          total_score: number
+          user_id: string
+        }[]
+      }
+      compute_team_health: {
+        Args: { _group_id: string; _lookback_days?: number }
+        Returns: {
+          activity_score: number
+          communication_score: number
+          deadline_score: number
+          health_score: number
+          member_count: number
         }[]
       }
       has_role: {
