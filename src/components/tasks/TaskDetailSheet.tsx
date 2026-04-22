@@ -86,8 +86,25 @@ export function TaskDetailSheet({
   const [description, setDescription] = useState("");
   const [status, setStatus] = useState<Status>("not_started");
   const [deadline, setDeadline] = useState("");
+  const [deadlineError, setDeadlineError] = useState<string | null>(null);
   const [assignee, setAssignee] = useState<string>(UNASSIGNED);
   const [saving, setSaving] = useState(false);
+
+  // Validates the deadline string. Returns an error message or null when valid.
+  const validateDeadline = (value: string): string | null => {
+    const v = value.trim();
+    if (!v) return "Deadline is required";
+    // HTML date input format: YYYY-MM-DD
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return "Use the format YYYY-MM-DD";
+    const d = new Date(`${v}T00:00:00`);
+    if (Number.isNaN(d.getTime())) return "That date doesn't exist";
+    const year = d.getFullYear();
+    if (year < 2000 || year > 2100) return "Year must be between 2000 and 2100";
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    if (d < today) return "Deadline cannot be in the past";
+    return null;
+  };
 
   const [subtasks, setSubtasks] = useState<Subtask[]>([]);
   const [newSubtask, setNewSubtask] = useState("");
@@ -102,6 +119,7 @@ export function TaskDetailSheet({
     setDescription(task.description ?? "");
     setStatus(task.status);
     setDeadline(task.deadline ? task.deadline.slice(0, 10) : "");
+    setDeadlineError(null);
     setAssignee(task.assigned_to ?? UNASSIGNED);
   }, [task]);
 
@@ -144,6 +162,12 @@ export function TaskDetailSheet({
 
   const saveDetails = async () => {
     if (!title.trim()) return toast.error("Title is required");
+    const dlError = validateDeadline(deadline);
+    setDeadlineError(dlError);
+    if (dlError) {
+      toast.error(dlError);
+      return;
+    }
     setSaving(true);
     const { error } = await supabase
       .from("tasks")
@@ -151,7 +175,7 @@ export function TaskDetailSheet({
         title: title.trim(),
         description: description.trim() || null,
         status,
-        deadline: deadline ? new Date(deadline).toISOString() : null,
+        deadline: new Date(`${deadline}T00:00:00`).toISOString(),
         assigned_to: assignee === UNASSIGNED ? null : assignee,
       })
       .eq("id", task.id);
@@ -281,13 +305,28 @@ export function TaskDetailSheet({
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="e-deadline">Deadline</Label>
+                <Label htmlFor="e-deadline">
+                  Deadline <span className="text-destructive">*</span>
+                </Label>
                 <Input
                   id="e-deadline"
                   type="date"
                   value={deadline}
-                  onChange={(e) => setDeadline(e.target.value)}
+                  required
+                  aria-invalid={!!deadlineError}
+                  aria-describedby="e-deadline-error"
+                  className={deadlineError ? "border-destructive focus-visible:ring-destructive" : ""}
+                  onChange={(e) => {
+                    setDeadline(e.target.value);
+                    setDeadlineError(validateDeadline(e.target.value));
+                  }}
+                  onBlur={() => setDeadlineError(validateDeadline(deadline))}
                 />
+                {deadlineError && (
+                  <p id="e-deadline-error" className="text-xs font-medium text-destructive">
+                    {deadlineError}
+                  </p>
+                )}
               </div>
             </div>
             <div className="space-y-2">
