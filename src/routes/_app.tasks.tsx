@@ -31,23 +31,17 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
+import {
+  TaskDetailSheet,
+  type MemberOption,
+  type TaskRecord,
+} from "@/components/tasks/TaskDetailSheet";
 
 export const Route = createFileRoute("/_app/tasks")({
   component: TasksPage,
 });
 
 type Status = "not_started" | "in_progress" | "completed";
-
-interface Task {
-  id: string;
-  title: string;
-  description: string | null;
-  status: Status;
-  deadline: string | null;
-  assigned_to: string | null;
-  created_by: string;
-  created_at: string;
-}
 
 const STATUS_META: Record<Status, { label: string; tone: string }> = {
   not_started: { label: "Not started", tone: "bg-muted text-muted-foreground" },
@@ -58,10 +52,12 @@ const STATUS_META: Record<Status, { label: string; tone: string }> = {
 function TasksPage() {
   const { user } = useAuth();
   const { group, loading: groupLoading } = useCurrentGroup();
-  const [tasks, setTasks] = useState<Task[]>([]);
+  const [tasks, setTasks] = useState<TaskRecord[]>([]);
+  const [members, setMembers] = useState<MemberOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState<"list" | "kanban">("list");
   const [open, setOpen] = useState(false);
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
 
   const refresh = async () => {
     if (!group) return;
@@ -71,14 +67,31 @@ function TasksPage() {
       .eq("group_id", group.id)
       .order("created_at", { ascending: false });
     if (error) toast.error(error.message);
-    else setTasks((data ?? []) as Task[]);
+    else setTasks((data ?? []) as TaskRecord[]);
+  };
+
+  const loadMembers = async () => {
+    if (!group) return;
+    const { data: ms } = await supabase
+      .from("memberships")
+      .select("user_id")
+      .eq("group_id", group.id);
+    const ids = (ms ?? []).map((m) => m.user_id);
+    if (ids.length === 0) return setMembers([]);
+    const { data: profs } = await supabase
+      .from("profiles")
+      .select("id, name, email")
+      .in("id", ids);
+    setMembers(
+      (profs ?? []).map((p) => ({ user_id: p.id, name: p.name ?? "", email: p.email })),
+    );
   };
 
   useEffect(() => {
     if (!group) return;
     (async () => {
       setLoading(true);
-      await refresh();
+      await Promise.all([refresh(), loadMembers()]);
       setLoading(false);
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -103,6 +116,11 @@ function TasksPage() {
       toast.error(error.message);
     } else toast.success("Task deleted");
   };
+
+  const selectedTask = useMemo(
+    () => tasks.find((t) => t.id === selectedTaskId) ?? null,
+    [tasks, selectedTaskId],
+  );
 
   if (groupLoading || loading) {
     return (
@@ -138,6 +156,7 @@ function TasksPage() {
             onOpenChange={setOpen}
             groupId={group?.id ?? ""}
             userId={user?.id ?? ""}
+            members={members}
             onCreated={refresh}
           />
         </div>
@@ -146,22 +165,52 @@ function TasksPage() {
       {tasks.length === 0 ? (
         <EmptyState onCreate={() => setOpen(true)} />
       ) : view === "list" ? (
-        <ListView tasks={tasks} onStatus={updateStatus} onDelete={deleteTask} />
+        <ListView
+          tasks={tasks}
+          members={members}
+          onStatus={updateStatus}
+          onDelete={deleteTask}
+          onOpen={setSelectedTaskId}
+        />
       ) : (
-        <KanbanView tasks={tasks} onStatus={updateStatus} onDelete={deleteTask} />
+        <KanbanView
+          tasks={tasks}
+          members={members}
+          onStatus={updateStatus}
+          onDelete={deleteTask}
+          onOpen={setSelectedTaskId}
+        />
       )}
+
+      <TaskDetailSheet
+        task={selectedTask}
+        members={members}
+        open={!!selectedTask}
+        onOpenChange={(o) => !o && setSelectedTaskId(null)}
+        onSaved={refresh}
+      />
     </div>
   );
 }
 
+function memberName(members: MemberOption[], id: string | null) {
+  if (!id) return null;
+  const m = members.find((x) => x.user_id === id);
+  return m?.name?.trim() || m?.email || null;
+}
+
 function ListView({
   tasks,
+  members,
   onStatus,
   onDelete,
+  onOpen,
 }: {
-  tasks: Task[];
+  tasks: TaskRecord[];
+  members: MemberOption[];
   onStatus: (id: string, s: Status) => void;
   onDelete: (id: string) => void;
+  onOpen: (id: string) => void;
 }) {
   return (
     <Card className="shadow-soft overflow-hidden">
@@ -170,6 +219,7 @@ function ListView({
           <thead className="bg-muted/50 text-xs uppercase tracking-wide text-muted-foreground">
             <tr>
               <th className="px-4 py-3 text-left font-medium">Title</th>
+              <th className="px-4 py-3 text-left font-medium">Assignee</th>
               <th className="px-4 py-3 text-left font-medium">Status</th>
               <th className="px-4 py-3 text-left font-medium">Deadline</th>
               <th className="px-4 py-3 text-right font-medium">Actions</th>
@@ -177,7 +227,11 @@ function ListView({
           </thead>
           <tbody className="divide-y">
             {tasks.map((t) => (
-              <tr key={t.id} className="hover:bg-muted/30">
+              <tr
+                key={t.id}
+                className="cursor-pointer hover:bg-muted/30"
+                onClick={() => onOpen(t.id)}
+              >
                 <td className="px-4 py-3">
                   <div className="font-medium">{t.title}</div>
                   {t.description && (
@@ -186,7 +240,10 @@ function ListView({
                     </div>
                   )}
                 </td>
-                <td className="px-4 py-3">
+                <td className="px-4 py-3 text-muted-foreground">
+                  {memberName(members, t.assigned_to) ?? "—"}
+                </td>
+                <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                   <Select value={t.status} onValueChange={(v) => onStatus(t.id, v as Status)}>
                     <SelectTrigger className="h-8 w-[140px]">
                       <SelectValue />
@@ -203,7 +260,7 @@ function ListView({
                 <td className="px-4 py-3 text-muted-foreground">
                   {t.deadline ? format(new Date(t.deadline), "MMM d, yyyy") : "—"}
                 </td>
-                <td className="px-4 py-3 text-right">
+                <td className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
                   <Button
                     size="icon"
                     variant="ghost"
@@ -224,16 +281,20 @@ function ListView({
 
 function KanbanView({
   tasks,
+  members,
   onStatus,
   onDelete,
+  onOpen,
 }: {
-  tasks: Task[];
+  tasks: TaskRecord[];
+  members: MemberOption[];
   onStatus: (id: string, s: Status) => void;
   onDelete: (id: string) => void;
+  onOpen: (id: string) => void;
 }) {
   const cols: Status[] = ["not_started", "in_progress", "completed"];
   const grouped = useMemo(() => {
-    const m: Record<Status, Task[]> = { not_started: [], in_progress: [], completed: [] };
+    const m: Record<Status, TaskRecord[]> = { not_started: [], in_progress: [], completed: [] };
     tasks.forEach((t) => m[t.status].push(t));
     return m;
   }, [tasks]);
@@ -250,43 +311,67 @@ function KanbanView({
             {grouped[c].length === 0 && (
               <p className="px-1 py-6 text-center text-xs text-muted-foreground">No tasks</p>
             )}
-            {grouped[c].map((t) => (
-              <Card key={t.id} className="shadow-soft">
-                <CardContent className="space-y-2 p-3">
-                  <div className="flex items-start justify-between gap-2">
-                    <p className="text-sm font-medium leading-snug">{t.title}</p>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      className="-mr-1 -mt-1 h-7 w-7"
-                      onClick={() => onDelete(t.id)}
+            {grouped[c].map((t) => {
+              const assignee = memberName(members, t.assigned_to);
+              return (
+                <Card
+                  key={t.id}
+                  className="cursor-pointer shadow-soft transition hover:border-accent/50"
+                  onClick={() => onOpen(t.id)}
+                >
+                  <CardContent className="space-y-2 p-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="text-sm font-medium leading-snug">{t.title}</p>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="-mr-1 -mt-1 h-7 w-7"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onDelete(t.id);
+                        }}
+                      >
+                        <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                      </Button>
+                    </div>
+                    {t.description && (
+                      <p className="line-clamp-2 text-xs text-muted-foreground">
+                        {t.description}
+                      </p>
+                    )}
+                    <div
+                      className="flex items-center justify-between gap-2 pt-1"
+                      onClick={(e) => e.stopPropagation()}
                     >
-                      <Trash2 className="h-3.5 w-3.5 text-destructive" />
-                    </Button>
-                  </div>
-                  {t.description && (
-                    <p className="line-clamp-2 text-xs text-muted-foreground">{t.description}</p>
-                  )}
-                  <div className="flex items-center justify-between gap-2 pt-1">
-                    <Badge className={cn("text-[10px]", STATUS_META[t.status].tone)} variant="outline">
-                      {t.deadline ? format(new Date(t.deadline), "MMM d") : "No deadline"}
-                    </Badge>
-                    <Select value={t.status} onValueChange={(v) => onStatus(t.id, v as Status)}>
-                      <SelectTrigger className="h-7 w-[120px] text-xs">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {(Object.keys(STATUS_META) as Status[]).map((s) => (
-                          <SelectItem key={s} value={s}>
-                            {STATUS_META[s].label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
+                      <Badge
+                        className={cn("text-[10px]", STATUS_META[t.status].tone)}
+                        variant="outline"
+                      >
+                        {t.deadline ? format(new Date(t.deadline), "MMM d") : "No deadline"}
+                      </Badge>
+                      <Select
+                        value={t.status}
+                        onValueChange={(v) => onStatus(t.id, v as Status)}
+                      >
+                        <SelectTrigger className="h-7 w-[120px] text-xs">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {(Object.keys(STATUS_META) as Status[]).map((s) => (
+                            <SelectItem key={s} value={s}>
+                              {STATUS_META[s].label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    {assignee && (
+                      <p className="pt-1 text-[11px] text-muted-foreground">@ {assignee}</p>
+                    )}
+                  </CardContent>
+                </Card>
+              );
+            })}
           </div>
         </div>
       ))}
@@ -294,23 +379,28 @@ function KanbanView({
   );
 }
 
+const UNASSIGNED = "__none__";
+
 function CreateTaskDialog({
   open,
   onOpenChange,
   groupId,
   userId,
+  members,
   onCreated,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
   groupId: string;
   userId: string;
+  members: MemberOption[];
   onCreated: () => void;
 }) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [status, setStatus] = useState<Status>("not_started");
   const [deadline, setDeadline] = useState("");
+  const [assignee, setAssignee] = useState<string>(UNASSIGNED);
   const [saving, setSaving] = useState(false);
 
   const submit = async () => {
@@ -323,6 +413,7 @@ function CreateTaskDialog({
       description: description.trim() || null,
       status,
       deadline: deadline ? new Date(deadline).toISOString() : null,
+      assigned_to: assignee === UNASSIGNED ? null : assignee,
     });
     setSaving(false);
     if (error) return toast.error(error.message);
@@ -331,6 +422,7 @@ function CreateTaskDialog({
     setDescription("");
     setStatus("not_started");
     setDeadline("");
+    setAssignee(UNASSIGNED);
     onOpenChange(false);
     onCreated();
   };
@@ -355,6 +447,7 @@ function CreateTaskDialog({
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="Design new landing hero"
+              maxLength={200}
             />
           </div>
           <div className="space-y-2">
@@ -365,6 +458,7 @@ function CreateTaskDialog({
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Optional details…"
               rows={3}
+              maxLength={2000}
             />
           </div>
           <div className="grid grid-cols-2 gap-3">
@@ -392,6 +486,22 @@ function CreateTaskDialog({
                 onChange={(e) => setDeadline(e.target.value)}
               />
             </div>
+          </div>
+          <div className="space-y-2">
+            <Label>Assignee</Label>
+            <Select value={assignee} onValueChange={setAssignee}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={UNASSIGNED}>Unassigned</SelectItem>
+                {members.map((m) => (
+                  <SelectItem key={m.user_id} value={m.user_id}>
+                    {m.name?.trim() || m.email}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
         </div>
         <DialogFooter>
