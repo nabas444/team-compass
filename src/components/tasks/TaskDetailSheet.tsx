@@ -305,13 +305,28 @@ export function TaskDetailSheet({
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="e-deadline">Deadline</Label>
+                <Label htmlFor="e-deadline">
+                  Deadline <span className="text-destructive">*</span>
+                </Label>
                 <Input
                   id="e-deadline"
                   type="date"
                   value={deadline}
-                  onChange={(e) => setDeadline(e.target.value)}
+                  required
+                  aria-invalid={!!deadlineError}
+                  aria-describedby="e-deadline-error"
+                  className={deadlineError ? "border-destructive focus-visible:ring-destructive" : ""}
+                  onChange={(e) => {
+                    setDeadline(e.target.value);
+                    setDeadlineError(validateDeadline(e.target.value));
+                  }}
+                  onBlur={() => setDeadlineError(validateDeadline(deadline))}
                 />
+                {deadlineError && (
+                  <p id="e-deadline-error" className="text-xs font-medium text-destructive">
+                    {deadlineError}
+                  </p>
+                )}
               </div>
             </div>
             <div className="space-y-2">
