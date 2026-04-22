@@ -86,8 +86,25 @@ export function TaskDetailSheet({
   const [description, setDescription] = useState("");
   const [status, setStatus] = useState<Status>("not_started");
   const [deadline, setDeadline] = useState("");
+  const [deadlineError, setDeadlineError] = useState<string | null>(null);
   const [assignee, setAssignee] = useState<string>(UNASSIGNED);
   const [saving, setSaving] = useState(false);
+
+  // Validates the deadline string. Returns an error message or null when valid.
+  const validateDeadline = (value: string): string | null => {
+    const v = value.trim();
+    if (!v) return "Deadline is required";
+    // HTML date input format: YYYY-MM-DD
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return "Use the format YYYY-MM-DD";
+    const d = new Date(`${v}T00:00:00`);
+    if (Number.isNaN(d.getTime())) return "That date doesn't exist";
+    const year = d.getFullYear();
+    if (year < 2000 || year > 2100) return "Year must be between 2000 and 2100";
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    if (d < today) return "Deadline cannot be in the past";
+    return null;
+  };
 
   const [subtasks, setSubtasks] = useState<Subtask[]>([]);
   const [newSubtask, setNewSubtask] = useState("");
