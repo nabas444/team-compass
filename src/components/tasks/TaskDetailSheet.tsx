@@ -119,6 +119,7 @@ export function TaskDetailSheet({
     setDescription(task.description ?? "");
     setStatus(task.status);
     setDeadline(task.deadline ? task.deadline.slice(0, 10) : "");
+    setDeadlineError(null);
     setAssignee(task.assigned_to ?? UNASSIGNED);
   }, [task]);
 
@@ -161,6 +162,12 @@ export function TaskDetailSheet({
 
   const saveDetails = async () => {
     if (!title.trim()) return toast.error("Title is required");
+    const dlError = validateDeadline(deadline);
+    setDeadlineError(dlError);
+    if (dlError) {
+      toast.error(dlError);
+      return;
+    }
     setSaving(true);
     const { error } = await supabase
       .from("tasks")
@@ -168,7 +175,7 @@ export function TaskDetailSheet({
         title: title.trim(),
         description: description.trim() || null,
         status,
-        deadline: deadline ? new Date(deadline).toISOString() : null,
+        deadline: new Date(`${deadline}T00:00:00`).toISOString(),
         assigned_to: assignee === UNASSIGNED ? null : assignee,
       })
       .eq("id", task.id);
