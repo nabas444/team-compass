@@ -316,6 +316,7 @@ export function TaskDetailSheet({
                   aria-invalid={!!deadlineError}
                   aria-describedby="e-deadline-error"
                   className={deadlineError ? "border-destructive focus-visible:ring-destructive" : ""}
+                  onFocus={() => setDeadlineError(validateDeadline(deadline))}
                   onChange={(e) => {
                     setDeadline(e.target.value);
                     setDeadlineError(validateDeadline(e.target.value));
