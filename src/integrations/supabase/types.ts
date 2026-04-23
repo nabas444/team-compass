@@ -809,6 +809,14 @@ export type Database = {
         Args: { _group_id: string; _user_id: string }
         Returns: boolean
       }
+      redeem_invite_code: {
+        Args: { _code: string }
+        Returns: {
+          already_member: boolean
+          group_id: string
+          group_name: string
+        }[]
+      }
       task_group_id: { Args: { _task_id: string }; Returns: string }
     }
     Enums: {
