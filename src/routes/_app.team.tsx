@@ -94,10 +94,10 @@ function TeamPage() {
     if (!currentGroup) return;
     setLoading(true);
 
-    const [{ data: m }, { data: inv }, { data: req }, { data: t }] = await Promise.all([
+    const [{ data: mRaw }, { data: inv }, { data: reqRaw }, { data: t }] = await Promise.all([
       supabase
         .from("memberships")
-        .select("id, user_id, role, created_at, profile:profiles!inner(name, email)")
+        .select("id, user_id, role, created_at")
         .eq("group_id", currentGroup.id),
       supabase
         .from("group_invites")
@@ -106,7 +106,7 @@ function TeamPage() {
         .order("created_at", { ascending: false }),
       supabase
         .from("group_join_requests")
-        .select("id, user_id, status, created_at, profile:profiles!inner(name, email)")
+        .select("id, user_id, status, created_at")
         .eq("group_id", currentGroup.id)
         .eq("status", "pending"),
       supabase
@@ -116,9 +116,36 @@ function TeamPage() {
         .order("created_at", { ascending: false }),
     ]);
 
-    setMembers((m as any) ?? []);
+    const userIds = Array.from(
+      new Set([
+        ...((mRaw ?? []).map((r: any) => r.user_id) as string[]),
+        ...((reqRaw ?? []).map((r: any) => r.user_id) as string[]),
+      ]),
+    );
+    let profileMap: Record<string, { name: string | null; email: string }> = {};
+    if (userIds.length > 0) {
+      const { data: profs } = await supabase
+        .from("profiles")
+        .select("id, name, email")
+        .in("id", userIds);
+      profileMap = Object.fromEntries(
+        (profs ?? []).map((p: any) => [p.id, { name: p.name, email: p.email }]),
+      );
+    }
+
+    setMembers(
+      ((mRaw as any) ?? []).map((m: any) => ({
+        ...m,
+        profile: profileMap[m.user_id] ?? null,
+      })),
+    );
     setInvites((inv as any) ?? []);
-    setRequests((req as any) ?? []);
+    setRequests(
+      ((reqRaw as any) ?? []).map((r: any) => ({
+        ...r,
+        profile: profileMap[r.user_id] ?? null,
+      })),
+    );
     setTasks((t as any) ?? []);
     setLoading(false);
   }, [currentGroup]);
