@@ -16,6 +16,7 @@ import { useAuth } from "@/lib/auth";
 import { useTheme } from "@/lib/theme";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { GroupSwitcher } from "@/components/groups/GroupSwitcher";
 
 export const Route = createFileRoute("/_app")({
   component: AppLayout,
@@ -64,6 +65,9 @@ function AppLayout() {
             G
           </div>
           <span className="font-semibold tracking-tight">GroupFlow</span>
+        </div>
+        <div className="border-b px-2 py-2">
+          <GroupSwitcher />
         </div>
         <nav className="flex-1 space-y-1 px-3 py-4">
           {NAV.map(({ to, label, icon: Icon }) => {
