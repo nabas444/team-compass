@@ -55,55 +55,28 @@ export function GroupSwitcher() {
     const trimmed = code.trim().toUpperCase();
     if (!trimmed) return;
     setBusy(true);
-    // Lookup invite
-    const { data: invite, error: invErr } = await supabase
-      .from("group_invites")
-      .select("id, group_id, revoked_at, expires_at")
-      .eq("code", trimmed)
-      .maybeSingle();
-    if (invErr || !invite) {
-      setBusy(false);
+    const { data, error } = await (supabase as any).rpc("redeem_invite_code", {
+      _code: trimmed,
+    });
+    setBusy(false);
+    if (error) {
+      toast.error(error.message || "Could not redeem invite code");
+      return;
+    }
+    const row = Array.isArray(data) ? data[0] : data;
+    if (!row?.group_id) {
       toast.error("Invalid invite code");
       return;
     }
-    if (invite.revoked_at || (invite.expires_at && new Date(invite.expires_at) < new Date())) {
-      setBusy(false);
-      toast.error("This invite is no longer valid");
-      return;
+    if (row.already_member) {
+      toast.info(`You're already in "${row.group_name}"`);
+    } else {
+      toast.success(`Joined "${row.group_name}"`);
     }
-    // Already a member?
-    const { data: existing } = await supabase
-      .from("memberships")
-      .select("id")
-      .eq("group_id", invite.group_id)
-      .eq("user_id", user.id)
-      .maybeSingle();
-    if (existing) {
-      setBusy(false);
-      toast.info("You're already in this group");
-      switchGroup(invite.group_id);
-      setJoinOpen(false);
-      setCode("");
-      return;
-    }
-    const { error: reqErr } = await supabase.from("group_join_requests").insert({
-      group_id: invite.group_id,
-      user_id: user.id,
-      invite_id: invite.id,
-    });
-    setBusy(false);
-    if (reqErr) {
-      if (reqErr.code === "23505") {
-        toast.info("You already have a pending request for this group");
-      } else {
-        toast.error(reqErr.message);
-      }
-      return;
-    }
-    toast.success("Request sent! Waiting for leader approval.");
     setJoinOpen(false);
     setCode("");
-    refresh();
+    await refresh();
+    switchGroup(row.group_id);
   };
 
   return (
