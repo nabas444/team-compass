@@ -5,7 +5,6 @@ import {
   Check,
   Copy,
   Crown,
-  Loader2,
   Plus,
   RefreshCw,
   Shield,
