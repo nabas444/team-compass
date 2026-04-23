@@ -228,7 +228,7 @@ export function GroupSwitcher() {
               Cancel
             </Button>
             <Button onClick={handleJoin} disabled={busy || !code.trim()}>
-              Send request
+              Join group
             </Button>
           </DialogFooter>
         </DialogContent>
