@@ -209,7 +209,7 @@ export function GroupSwitcher() {
           <DialogHeader>
             <DialogTitle>Join a group</DialogTitle>
             <DialogDescription>
-              Enter the invite code shared by a group leader. They'll review and approve your request.
+              Enter the invite code shared by a group leader. You'll be added to that group instantly.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-1.5">
