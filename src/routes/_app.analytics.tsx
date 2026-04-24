@@ -684,7 +684,7 @@ function AnalyticsPage() {
                           {c.comments}
                         </span>
                         {c.late > 0 && (
-                          <span className="text-amber-600">{c.late} late</span>
+                          <span className="text-destructive">{c.late} late</span>
                         )}
                       </div>
                     </div>
