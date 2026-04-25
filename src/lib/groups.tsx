@@ -171,6 +171,7 @@ export function GroupsProvider({ children }: { children: ReactNode }) {
     currentGroupId,
     currentGroup,
     isLeader: currentGroup?.role === "leader",
+    canManage: currentGroup?.role === "leader" || currentGroup?.role === "co_leader",
     loading,
     error,
     switchGroup,
