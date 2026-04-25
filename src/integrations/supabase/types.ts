@@ -414,6 +414,7 @@ export type Database = {
       memberships: {
         Row: {
           created_at: string
+          custom_title: string | null
           group_id: string
           id: string
           role: Database["public"]["Enums"]["app_role"]
@@ -421,6 +422,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          custom_title?: string | null
           group_id: string
           id?: string
           role?: Database["public"]["Enums"]["app_role"]
@@ -428,6 +430,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          custom_title?: string | null
           group_id?: string
           id?: string
           role?: Database["public"]["Enums"]["app_role"]
@@ -514,6 +517,56 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      role_proposals: {
+        Row: {
+          created_at: string
+          decline_reason: string | null
+          group_id: string
+          id: string
+          proposed_by: string
+          proposed_role: Database["public"]["Enums"]["app_role"]
+          proposed_title: string | null
+          resolved_at: string | null
+          status: string
+          target_user_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          decline_reason?: string | null
+          group_id: string
+          id?: string
+          proposed_by: string
+          proposed_role: Database["public"]["Enums"]["app_role"]
+          proposed_title?: string | null
+          resolved_at?: string | null
+          status?: string
+          target_user_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          decline_reason?: string | null
+          group_id?: string
+          id?: string
+          proposed_by?: string
+          proposed_role?: Database["public"]["Enums"]["app_role"]
+          proposed_title?: string | null
+          resolved_at?: string | null
+          status?: string
+          target_user_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "role_proposals_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "groups"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       subtasks: {
         Row: {
@@ -809,6 +862,15 @@ export type Database = {
         Args: { _group_id: string; _user_id: string }
         Returns: boolean
       }
+      propose_role_change: {
+        Args: {
+          _group_id: string
+          _proposed_role: Database["public"]["Enums"]["app_role"]
+          _proposed_title?: string
+          _target_user_id: string
+        }
+        Returns: string
+      }
       redeem_invite_code: {
         Args: { _code: string }
         Returns: {
@@ -816,6 +878,10 @@ export type Database = {
           group_id: string
           group_name: string
         }[]
+      }
+      respond_role_proposal: {
+        Args: { _accept: boolean; _proposal_id: string; _reason?: string }
+        Returns: undefined
       }
       task_group_id: { Args: { _task_id: string }; Returns: string }
     }
