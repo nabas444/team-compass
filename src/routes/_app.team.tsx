@@ -44,10 +44,12 @@ export const Route = createFileRoute("/_app/team")({
   component: TeamPage,
 });
 
+type Role = "leader" | "co_leader" | "member";
+
 interface Member {
   id: string;
   user_id: string;
-  role: "leader" | "member";
+  role: Role;
   created_at: string;
   profile: { name: string | null; email: string } | null;
 }
