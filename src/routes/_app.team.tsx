@@ -8,8 +8,8 @@ import {
   Plus,
   RefreshCw,
   Shield,
-  ShieldOff,
   Trash2,
+  UserCog,
   UserMinus,
   X,
 } from "lucide-react";
@@ -38,6 +38,7 @@ import {
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 
 export const Route = createFileRoute("/_app/team")({
@@ -50,6 +51,7 @@ interface Member {
   id: string;
   user_id: string;
   role: Role;
+  custom_title: string | null;
   created_at: string;
   profile: { name: string | null; email: string } | null;
 }
@@ -73,6 +75,30 @@ interface TaskRow {
   status: string;
   assigned_to: string | null;
 }
+interface Proposal {
+  id: string;
+  target_user_id: string;
+  proposed_by: string;
+  proposed_role: Role;
+  proposed_title: string | null;
+  status: "pending" | "accepted" | "declined" | "cancelled";
+  decline_reason: string | null;
+  created_at: string;
+}
+
+const PRESET_TITLES = [
+  "Co-leader",
+  "Secretary",
+  "Treasurer",
+  "Writer",
+  "Editor",
+  "Organizer",
+  "Designer",
+  "Developer",
+  "Researcher",
+  "Spokesperson",
+  "Member",
+];
 
 function generateCode(len = 8) {
   const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -81,42 +107,61 @@ function generateCode(len = 8) {
   return s;
 }
 
+function roleLabel(r: Role) {
+  return r === "co_leader" ? "Co-leader" : r === "leader" ? "Leader" : "Member";
+}
+
 function TeamPage() {
   const { user } = useAuth();
-  const { currentGroup, isLeader, canManage, refresh } = useGroups();
+  const { currentGroup, isLeader, refresh } = useGroups();
   const [members, setMembers] = useState<Member[]>([]);
   const [invites, setInvites] = useState<Invite[]>([]);
   const [requests, setRequests] = useState<JoinRequest[]>([]);
   const [tasks, setTasks] = useState<TaskRow[]>([]);
+  const [proposals, setProposals] = useState<Proposal[]>([]);
   const [loading, setLoading] = useState(true);
   const [assignOpen, setAssignOpen] = useState<{ userId: string; name: string } | null>(null);
   const [transferTarget, setTransferTarget] = useState<Member | null>(null);
+  const [proposeFor, setProposeFor] = useState<Member | null>(null);
+  const [proposedRole, setProposedRole] = useState<Role>("member");
+  const [proposedTitle, setProposedTitle] = useState<string>("Member");
+  const [customTitle, setCustomTitle] = useState("");
+  const [declineFor, setDeclineFor] = useState<Proposal | null>(null);
+  const [declineReason, setDeclineReason] = useState("");
 
   const loadAll = useCallback(async () => {
     if (!currentGroup) return;
     setLoading(true);
 
-    const [{ data: mRaw }, { data: inv }, { data: reqRaw }, { data: t }] = await Promise.all([
-      supabase
-        .from("memberships")
-        .select("id, user_id, role, created_at")
-        .eq("group_id", currentGroup.id),
-      supabase
-        .from("group_invites")
-        .select("id, code, created_at, expires_at, revoked_at")
-        .eq("group_id", currentGroup.id)
-        .order("created_at", { ascending: false }),
-      supabase
-        .from("group_join_requests")
-        .select("id, user_id, status, created_at")
-        .eq("group_id", currentGroup.id)
-        .eq("status", "pending"),
-      supabase
-        .from("tasks")
-        .select("id, title, status, assigned_to")
-        .eq("group_id", currentGroup.id)
-        .order("created_at", { ascending: false }),
-    ]);
+    const [{ data: mRaw }, { data: inv }, { data: reqRaw }, { data: t }, { data: prop }] =
+      await Promise.all([
+        supabase
+          .from("memberships")
+          .select("id, user_id, role, custom_title, created_at")
+          .eq("group_id", currentGroup.id),
+        supabase
+          .from("group_invites")
+          .select("id, code, created_at, expires_at, revoked_at")
+          .eq("group_id", currentGroup.id)
+          .order("created_at", { ascending: false }),
+        supabase
+          .from("group_join_requests")
+          .select("id, user_id, status, created_at")
+          .eq("group_id", currentGroup.id)
+          .eq("status", "pending"),
+        supabase
+          .from("tasks")
+          .select("id, title, status, assigned_to")
+          .eq("group_id", currentGroup.id)
+          .order("created_at", { ascending: false }),
+        (supabase as any)
+          .from("role_proposals")
+          .select(
+            "id, target_user_id, proposed_by, proposed_role, proposed_title, status, decline_reason, created_at",
+          )
+          .eq("group_id", currentGroup.id)
+          .order("created_at", { ascending: false }),
+      ]);
 
     const userIds = Array.from(
       new Set([
@@ -149,6 +194,7 @@ function TeamPage() {
       })),
     );
     setTasks((t as any) ?? []);
+    setProposals((prop as any) ?? []);
     setLoading(false);
   }, [currentGroup]);
 
@@ -156,9 +202,17 @@ function TeamPage() {
     loadAll();
   }, [loadAll]);
 
-  const leaderCount = useMemo(() => members.filter((m) => m.role === "leader").length, [members]);
+  const me = members.find((m) => m.user_id === user?.id) ?? null;
+  const myPending = useMemo(
+    () => proposals.filter((p) => p.target_user_id === user?.id && p.status === "pending"),
+    [proposals, user?.id],
+  );
+  const sentProposals = useMemo(
+    () => proposals.filter((p) => p.status !== "cancelled").slice(0, 25),
+    [proposals],
+  );
 
-  // ---------- Invite codes ----------
+  // ---------- Invite codes (leader only) ----------
   const createInvite = async () => {
     if (!currentGroup || !user) return;
     const code = generateCode();
@@ -169,10 +223,7 @@ function TeamPage() {
       created_by: user.id,
       expires_at: expires,
     });
-    if (error) {
-      toast.error(error.message);
-      return;
-    }
+    if (error) return toast.error(error.message);
     toast.success("Invite code created");
     loadAll();
   };
@@ -190,7 +241,7 @@ function TeamPage() {
     toast.success("Code copied");
   };
 
-  // ---------- Join requests ----------
+  // ---------- Join requests (leader only) ----------
   const approve = async (req: JoinRequest) => {
     if (!currentGroup || !user) return;
     const { error: insErr } = await supabase.from("memberships").insert({
@@ -198,16 +249,13 @@ function TeamPage() {
       user_id: req.user_id,
       role: "member",
     });
-    if (insErr && insErr.code !== "23505") {
-      toast.error(insErr.message);
-      return;
-    }
+    if (insErr && insErr.code !== "23505") return toast.error(insErr.message);
     const { error: updErr } = await supabase
       .from("group_join_requests")
       .update({ status: "approved", resolved_at: new Date().toISOString(), resolved_by: user.id })
       .eq("id", req.id);
     if (updErr) return toast.error(updErr.message);
-    toast.success(`${req.profile?.name || req.profile?.email} added to the group`);
+    toast.success(`${req.profile?.name || req.profile?.email} added`);
     loadAll();
   };
   const decline = async (req: JoinRequest) => {
@@ -221,43 +269,72 @@ function TeamPage() {
     loadAll();
   };
 
-  // ---------- Member actions ----------
-  const me = members.find((m) => m.user_id === user?.id) ?? null;
-
-  // Promote a member to co-leader (any leader/co-leader can do)
-  const promoteToCoLeader = async (member: Member) => {
-    const { error } = await supabase
-      .from("memberships")
-      .update({ role: "co_leader" })
-      .eq("id", member.id);
-    if (error) return toast.error(error.message);
-    toast.success(`${member.profile?.name || "Member"} is now a co-leader`);
-    loadAll();
-    refresh();
+  // ---------- Role proposals ----------
+  const openProposeFor = (m: Member) => {
+    setProposeFor(m);
+    setProposedRole(m.role === "leader" ? "leader" : m.role);
+    setProposedTitle(m.custom_title || roleLabel(m.role));
+    setCustomTitle("");
   };
 
-  // Demote a co-leader back to member (leader/co-leader can do; cannot target the leader)
-  const demoteToMember = async (member: Member) => {
-    if (member.role === "leader") {
-      toast.error("Transfer leadership first");
+  const submitProposal = async () => {
+    if (!proposeFor || !currentGroup) return;
+    const finalTitle =
+      proposedTitle === "__custom__" ? customTitle.trim() : proposedTitle.trim();
+    if (proposedTitle === "__custom__" && !finalTitle) {
+      toast.error("Enter a custom title");
       return;
     }
-    const { error } = await supabase
-      .from("memberships")
-      .update({ role: "member" })
-      .eq("id", member.id);
+    const { error } = await (supabase as any).rpc("propose_role_change", {
+      _group_id: currentGroup.id,
+      _target_user_id: proposeFor.user_id,
+      _proposed_role: proposedRole,
+      _proposed_title: finalTitle || null,
+    });
     if (error) return toast.error(error.message);
-    toast.success(`Role updated`);
+    if (proposeFor.user_id === user?.id) {
+      toast.success("Your title was updated");
+    } else {
+      toast.success(`Proposal sent to ${proposeFor.profile?.name || "member"}`);
+    }
+    setProposeFor(null);
     loadAll();
     refresh();
   };
 
-  // Transfer leadership to another member: current leader becomes co-leader, target becomes leader.
-  // Only the current leader may do this.
+  const acceptProposal = async (p: Proposal) => {
+    const { error } = await (supabase as any).rpc("respond_role_proposal", {
+      _proposal_id: p.id,
+      _accept: true,
+    });
+    if (error) return toast.error(error.message);
+    toast.success("Role accepted");
+    loadAll();
+    refresh();
+  };
+
+  const submitDecline = async () => {
+    if (!declineFor) return;
+    if (declineReason.trim().length < 3) {
+      toast.error("Please provide a justification (min 3 characters)");
+      return;
+    }
+    const { error } = await (supabase as any).rpc("respond_role_proposal", {
+      _proposal_id: declineFor.id,
+      _accept: false,
+      _reason: declineReason.trim(),
+    });
+    if (error) return toast.error(error.message);
+    toast.info("Proposal declined");
+    setDeclineFor(null);
+    setDeclineReason("");
+    loadAll();
+  };
+
+  // ---------- Leadership transfer (leader only) ----------
   const transferLeadership = async (target: Member) => {
     if (!isLeader || !me) return toast.error("Only the leader can transfer leadership");
     if (target.user_id === me.user_id) return;
-    // Step down current leader to co_leader first to avoid two leaders momentarily.
     const { error: e1 } = await supabase
       .from("memberships")
       .update({ role: "co_leader" })
@@ -268,7 +345,6 @@ function TeamPage() {
       .update({ role: "leader" })
       .eq("id", target.id);
     if (e2) {
-      // Roll back
       await supabase.from("memberships").update({ role: "leader" }).eq("id", me.id);
       return toast.error(e2.message);
     }
@@ -279,11 +355,8 @@ function TeamPage() {
   };
 
   const removeMember = async (member: Member) => {
-    if (member.role === "leader") {
-      toast.error("Transfer leadership before removing the leader");
-      return;
-    }
-    if (!confirm(`Remove ${member.profile?.name || member.profile?.email} from the group?`)) return;
+    if (member.role === "leader") return toast.error("Transfer leadership first");
+    if (!confirm(`Remove ${member.profile?.name || member.profile?.email}?`)) return;
     const { error } = await supabase.from("memberships").delete().eq("id", member.id);
     if (error) return toast.error(error.message);
     toast.success("Member removed");
@@ -291,7 +364,7 @@ function TeamPage() {
     refresh();
   };
 
-  // ---------- Quick assign task ----------
+  // ---------- Quick assign task (leader only) ----------
   const assignTask = async (taskId: string, userId: string) => {
     const { error } = await supabase.from("tasks").update({ assigned_to: userId }).eq("id", taskId);
     if (error) return toast.error(error.message);
@@ -318,8 +391,8 @@ function TeamPage() {
             {isLeader
               ? "You are the leader of this group"
               : me?.role === "co_leader"
-                ? "You are a co-leader"
-                : "You are a member"}
+                ? `You are a co-leader${me.custom_title ? ` (${me.custom_title})` : ""}`
+                : `You are a member${me?.custom_title ? ` (${me.custom_title})` : ""}`}
           </p>
         </div>
         <Button variant="outline" size="sm" onClick={loadAll}>
@@ -327,10 +400,53 @@ function TeamPage() {
         </Button>
       </div>
 
+      {/* My pending offers — visible to ANY user that has one */}
+      {myPending.length > 0 && (
+        <Card className="border-accent">
+          <CardHeader>
+            <CardTitle className="text-base">Role offers from your leader</CardTitle>
+            <CardDescription>
+              Accept to take on the new role. Declining requires a short justification.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {myPending.map((p) => (
+              <div
+                key={p.id}
+                className="flex flex-wrap items-center gap-3 rounded-md border p-3"
+              >
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium">
+                    {p.proposed_title || roleLabel(p.proposed_role)}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Proposed role: {roleLabel(p.proposed_role)} ·{" "}
+                    {format(new Date(p.created_at), "MMM d, p")}
+                  </p>
+                </div>
+                <Button size="sm" onClick={() => acceptProposal(p)}>
+                  <Check className="mr-1 h-4 w-4" /> Accept
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    setDeclineFor(p);
+                    setDeclineReason("");
+                  }}
+                >
+                  <X className="mr-1 h-4 w-4" /> Decline
+                </Button>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
+
       <Tabs defaultValue="members">
         <TabsList>
           <TabsTrigger value="members">Members</TabsTrigger>
-          {canManage && (
+          {isLeader && (
             <>
               <TabsTrigger value="requests">
                 Requests
@@ -341,6 +457,7 @@ function TeamPage() {
                 )}
               </TabsTrigger>
               <TabsTrigger value="invites">Invites</TabsTrigger>
+              <TabsTrigger value="proposals">Role proposals</TabsTrigger>
             </>
           )}
         </TabsList>
@@ -373,9 +490,15 @@ function TeamPage() {
                         <div className="min-w-0 flex-1">
                           <p className="truncate text-sm font-medium">{name}</p>
                           <p className="truncate text-xs text-muted-foreground">
-                            {m.profile?.email} · joined {format(new Date(m.created_at), "MMM d, yyyy")}
+                            {m.profile?.email} · joined{" "}
+                            {format(new Date(m.created_at), "MMM d, yyyy")}
                           </p>
                         </div>
+                        {m.custom_title && (
+                          <Badge variant="outline" className="hidden sm:inline-flex">
+                            {m.custom_title}
+                          </Badge>
+                        )}
                         <Badge
                           variant={
                             m.role === "leader"
@@ -387,40 +510,32 @@ function TeamPage() {
                         >
                           {m.role === "leader" && <Crown className="mr-1 h-3 w-3" />}
                           {m.role === "co_leader" && <Shield className="mr-1 h-3 w-3" />}
-                          {m.role === "co_leader" ? "co-leader" : m.role}
+                          {roleLabel(m.role)}
                         </Badge>
-                        {canManage && m.user_id !== user?.id && (
+                        {isLeader && (
                           <div className="flex items-center gap-1">
+                            {m.user_id !== user?.id && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => setAssignOpen({ userId: m.user_id, name })}
+                              >
+                                Assign task
+                              </Button>
+                            )}
                             <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() =>
-                                setAssignOpen({ userId: m.user_id, name })
+                              size="icon"
+                              variant="ghost"
+                              title={
+                                m.user_id === user?.id
+                                  ? "Edit your title"
+                                  : "Propose role / title"
                               }
+                              onClick={() => openProposeFor(m)}
                             >
-                              Assign task
+                              <UserCog className="h-4 w-4" />
                             </Button>
-                            {m.role === "member" && (
-                              <Button
-                                size="icon"
-                                variant="ghost"
-                                title="Promote to co-leader"
-                                onClick={() => promoteToCoLeader(m)}
-                              >
-                                <Shield className="h-4 w-4" />
-                              </Button>
-                            )}
-                            {m.role === "co_leader" && (
-                              <Button
-                                size="icon"
-                                variant="ghost"
-                                title="Demote to member"
-                                onClick={() => demoteToMember(m)}
-                              >
-                                <ShieldOff className="h-4 w-4" />
-                              </Button>
-                            )}
-                            {isLeader && m.role !== "leader" && (
+                            {m.user_id !== user?.id && m.role !== "leader" && (
                               <Button
                                 size="icon"
                                 variant="ghost"
@@ -430,7 +545,7 @@ function TeamPage() {
                                 <Crown className="h-4 w-4" />
                               </Button>
                             )}
-                            {m.role !== "leader" && (
+                            {m.user_id !== user?.id && m.role !== "leader" && (
                               <Button
                                 size="icon"
                                 variant="ghost"
@@ -449,10 +564,15 @@ function TeamPage() {
               )}
             </CardContent>
           </Card>
+          {!isLeader && (
+            <p className="mt-3 text-xs text-muted-foreground">
+              Only the group leader can manage roles, invites, and join requests.
+            </p>
+          )}
         </TabsContent>
 
-        {/* Requests */}
-        {canManage && (
+        {/* Requests — leader only */}
+        {isLeader && (
           <TabsContent value="requests" className="mt-4">
             <Card>
               <CardHeader>
@@ -477,7 +597,8 @@ function TeamPage() {
                           <div className="min-w-0 flex-1">
                             <p className="truncate text-sm font-medium">{name}</p>
                             <p className="truncate text-xs text-muted-foreground">
-                              {r.profile?.email} · {format(new Date(r.created_at), "MMM d, yyyy p")}
+                              {r.profile?.email} ·{" "}
+                              {format(new Date(r.created_at), "MMM d, yyyy p")}
                             </p>
                           </div>
                           <Button size="sm" onClick={() => approve(r)}>
@@ -496,15 +617,15 @@ function TeamPage() {
           </TabsContent>
         )}
 
-        {/* Invites */}
-        {canManage && (
+        {/* Invites — leader only */}
+        {isLeader && (
           <TabsContent value="invites" className="mt-4">
             <Card>
               <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0">
                 <div>
                   <CardTitle className="text-base">Invite codes</CardTitle>
                   <CardDescription>
-                    Share a code so people can request to join. Codes expire after 14 days.
+                    Share a code so people can join. Codes expire after 14 days.
                   </CardDescription>
                 </div>
                 <Button onClick={createInvite}>
@@ -544,10 +665,72 @@ function TeamPage() {
                             <Copy className="h-4 w-4" />
                           </Button>
                           {!expired && (
-                            <Button size="icon" variant="ghost" onClick={() => revokeInvite(inv.id)}>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              onClick={() => revokeInvite(inv.id)}
+                            >
                               <Trash2 className="h-4 w-4" />
                             </Button>
                           )}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+        )}
+
+        {/* Sent role proposals — leader only */}
+        {isLeader && (
+          <TabsContent value="proposals" className="mt-4">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Role proposals you've sent</CardTitle>
+                <CardDescription>
+                  Members must accept a proposal before their role/title changes.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="p-0">
+                {sentProposals.length === 0 ? (
+                  <p className="px-6 py-10 text-center text-sm text-muted-foreground">
+                    No proposals yet.
+                  </p>
+                ) : (
+                  <ul className="divide-y">
+                    {sentProposals.map((p) => {
+                      const target = members.find((m) => m.user_id === p.target_user_id);
+                      const name =
+                        target?.profile?.name || target?.profile?.email || "Unknown";
+                      return (
+                        <li key={p.id} className="flex flex-wrap items-center gap-3 px-4 py-3">
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-sm font-medium">
+                              {name} → {p.proposed_title || roleLabel(p.proposed_role)}
+                            </p>
+                            <p className="truncate text-xs text-muted-foreground">
+                              {format(new Date(p.created_at), "MMM d, p")} · role:{" "}
+                              {roleLabel(p.proposed_role)}
+                            </p>
+                            {p.status === "declined" && p.decline_reason && (
+                              <p className="mt-1 text-xs text-destructive">
+                                Declined: {p.decline_reason}
+                              </p>
+                            )}
+                          </div>
+                          <Badge
+                            variant={
+                              p.status === "accepted"
+                                ? "default"
+                                : p.status === "pending"
+                                  ? "outline"
+                                  : "secondary"
+                            }
+                          >
+                            {p.status}
+                          </Badge>
                         </li>
                       );
                     })}
@@ -596,25 +779,118 @@ function TeamPage() {
         </DialogContent>
       </Dialog>
 
+      {/* Propose role / title */}
+      <Dialog open={!!proposeFor} onOpenChange={(o) => !o && setProposeFor(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {proposeFor?.user_id === user?.id
+                ? "Edit your title"
+                : `Propose a role for ${proposeFor?.profile?.name || "member"}`}
+            </DialogTitle>
+            <DialogDescription>
+              {proposeFor?.user_id === user?.id
+                ? "As the leader, your title updates immediately. Your role stays as Leader."
+                : "The member will receive a notification and must accept the role before it takes effect."}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            {proposeFor?.user_id !== user?.id && (
+              <div className="space-y-1.5">
+                <Label>Role</Label>
+                <Select value={proposedRole} onValueChange={(v) => setProposedRole(v as Role)}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="member">Member</SelectItem>
+                    <SelectItem value="co_leader">Co-leader</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+            <div className="space-y-1.5">
+              <Label>Title</Label>
+              <Select value={proposedTitle} onValueChange={setProposedTitle}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {PRESET_TITLES.map((t) => (
+                    <SelectItem key={t} value={t}>
+                      {t}
+                    </SelectItem>
+                  ))}
+                  <SelectItem value="__custom__">Custom…</SelectItem>
+                </SelectContent>
+              </Select>
+              {proposedTitle === "__custom__" && (
+                <Input
+                  placeholder="e.g. Event Coordinator"
+                  value={customTitle}
+                  onChange={(e) => setCustomTitle(e.target.value)}
+                  maxLength={40}
+                />
+              )}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setProposeFor(null)}>
+              Cancel
+            </Button>
+            <Button onClick={submitProposal}>
+              {proposeFor?.user_id === user?.id ? "Save" : "Send proposal"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Decline proposal — must justify */}
+      <Dialog open={!!declineFor} onOpenChange={(o) => !o && setDeclineFor(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Decline this role offer</DialogTitle>
+            <DialogDescription>
+              Please tell your leader why you're declining. Your justification will be
+              shared with them.
+            </DialogDescription>
+          </DialogHeader>
+          <Textarea
+            value={declineReason}
+            onChange={(e) => setDeclineReason(e.target.value)}
+            placeholder="e.g. I don't have the bandwidth for this role right now."
+            rows={4}
+            maxLength={500}
+          />
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setDeclineFor(null)}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={submitDecline}>
+              Decline with reason
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Transfer leadership confirm */}
       <Dialog open={!!transferTarget} onOpenChange={(o) => !o && setTransferTarget(null)}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Transfer leadership?</DialogTitle>
             <DialogDescription>
-              {(transferTarget?.profile?.name || transferTarget?.profile?.email) ?? "This member"}
+              {(transferTarget?.profile?.name || transferTarget?.profile?.email) ??
+                "This member"}
               {" will become the leader of "}
               {currentGroup.name}
-              {". You will be demoted to co-leader. A group can only have one leader at a time."}
+              {". You will be demoted to co-leader. A group can only have one leader."}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button variant="ghost" onClick={() => setTransferTarget(null)}>
               Cancel
             </Button>
-            <Button
-              onClick={() => transferTarget && transferLeadership(transferTarget)}
-            >
+            <Button onClick={() => transferTarget && transferLeadership(transferTarget)}>
               <Crown className="mr-2 h-4 w-4" /> Transfer leadership
             </Button>
           </DialogFooter>
