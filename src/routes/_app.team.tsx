@@ -595,6 +595,27 @@ function TeamPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
-  );
-}
+
+      {/* Transfer leadership confirm */}
+      <Dialog open={!!transferTarget} onOpenChange={(o) => !o && setTransferTarget(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Transfer leadership?</DialogTitle>
+            <DialogDescription>
+              {transferTarget?.profile?.name || transferTarget?.profile?.email} will become the
+              leader of <span className="font-medium">{currentGroup.name}</span>. You will be
+              demoted to co-leader. A group can only have one leader at a time.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setTransferTarget(null)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => transferTarget && transferLeadership(transferTarget)}
+            >
+              <Crown className="mr-2 h-4 w-4" /> Transfer leadership
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
