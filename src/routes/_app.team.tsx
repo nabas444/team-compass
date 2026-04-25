@@ -330,7 +330,7 @@ function TeamPage() {
       <Tabs defaultValue="members">
         <TabsList>
           <TabsTrigger value="members">Members</TabsTrigger>
-          {isLeader && (
+          {canManage && (
             <>
               <TabsTrigger value="requests">
                 Requests
@@ -452,7 +452,7 @@ function TeamPage() {
         </TabsContent>
 
         {/* Requests */}
-        {isLeader && (
+        {canManage && (
           <TabsContent value="requests" className="mt-4">
             <Card>
               <CardHeader>
@@ -497,7 +497,7 @@ function TeamPage() {
         )}
 
         {/* Invites */}
-        {isLeader && (
+        {canManage && (
           <TabsContent value="invites" className="mt-4">
             <Card>
               <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0">
