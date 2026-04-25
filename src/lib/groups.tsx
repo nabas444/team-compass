@@ -10,18 +10,23 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 
+export type GroupRole = "leader" | "co_leader" | "member";
+
 export interface GroupSummary {
   id: string;
   name: string;
   description: string | null;
-  role: "leader" | "member";
+  role: GroupRole;
 }
 
 interface GroupsContextValue {
   groups: GroupSummary[];
   currentGroupId: string | null;
   currentGroup: GroupSummary | null;
+  /** True when the current user is the sole leader of the current group. */
   isLeader: boolean;
+  /** True when the current user has elevated permissions (leader OR co-leader). */
+  canManage: boolean;
   loading: boolean;
   error: string | null;
   switchGroup: (id: string) => void;
