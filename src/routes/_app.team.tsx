@@ -222,23 +222,65 @@ function TeamPage() {
   };
 
   // ---------- Member actions ----------
-  const setRole = async (member: Member, role: "leader" | "member") => {
-    if (member.role === "leader" && role === "member" && leaderCount <= 1) {
-      toast.error("There must be at least one leader");
+  const me = members.find((m) => m.user_id === user?.id) ?? null;
+
+  // Promote a member to co-leader (any leader/co-leader can do)
+  const promoteToCoLeader = async (member: Member) => {
+    const { error } = await supabase
+      .from("memberships")
+      .update({ role: "co_leader" })
+      .eq("id", member.id);
+    if (error) return toast.error(error.message);
+    toast.success(`${member.profile?.name || "Member"} is now a co-leader`);
+    loadAll();
+    refresh();
+  };
+
+  // Demote a co-leader back to member (leader/co-leader can do; cannot target the leader)
+  const demoteToMember = async (member: Member) => {
+    if (member.role === "leader") {
+      toast.error("Transfer leadership first");
       return;
     }
     const { error } = await supabase
       .from("memberships")
-      .update({ role })
+      .update({ role: "member" })
       .eq("id", member.id);
     if (error) return toast.error(error.message);
     toast.success(`Role updated`);
     loadAll();
     refresh();
   };
+
+  // Transfer leadership to another member: current leader becomes co-leader, target becomes leader.
+  // Only the current leader may do this.
+  const transferLeadership = async (target: Member) => {
+    if (!isLeader || !me) return toast.error("Only the leader can transfer leadership");
+    if (target.user_id === me.user_id) return;
+    // Step down current leader to co_leader first to avoid two leaders momentarily.
+    const { error: e1 } = await supabase
+      .from("memberships")
+      .update({ role: "co_leader" })
+      .eq("id", me.id);
+    if (e1) return toast.error(e1.message);
+    const { error: e2 } = await supabase
+      .from("memberships")
+      .update({ role: "leader" })
+      .eq("id", target.id);
+    if (e2) {
+      // Roll back
+      await supabase.from("memberships").update({ role: "leader" }).eq("id", me.id);
+      return toast.error(e2.message);
+    }
+    toast.success(`Leadership transferred to ${target.profile?.name || "member"}`);
+    setTransferTarget(null);
+    loadAll();
+    refresh();
+  };
+
   const removeMember = async (member: Member) => {
-    if (member.role === "leader" && leaderCount <= 1) {
-      toast.error("Promote another leader first");
+    if (member.role === "leader") {
+      toast.error("Transfer leadership before removing the leader");
       return;
     }
     if (!confirm(`Remove ${member.profile?.name || member.profile?.email} from the group?`)) return;
