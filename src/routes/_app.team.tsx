@@ -372,11 +372,20 @@ function TeamPage() {
                             {m.profile?.email} · joined {format(new Date(m.created_at), "MMM d, yyyy")}
                           </p>
                         </div>
-                        <Badge variant={m.role === "leader" ? "default" : "secondary"}>
+                        <Badge
+                          variant={
+                            m.role === "leader"
+                              ? "default"
+                              : m.role === "co_leader"
+                                ? "outline"
+                                : "secondary"
+                          }
+                        >
                           {m.role === "leader" && <Crown className="mr-1 h-3 w-3" />}
-                          {m.role}
+                          {m.role === "co_leader" && <Shield className="mr-1 h-3 w-3" />}
+                          {m.role === "co_leader" ? "co-leader" : m.role}
                         </Badge>
-                        {isLeader && m.user_id !== user?.id && (
+                        {canManage && m.user_id !== user?.id && (
                           <div className="flex items-center gap-1">
                             <Button
                               size="sm"
@@ -387,33 +396,46 @@ function TeamPage() {
                             >
                               Assign task
                             </Button>
-                            {m.role === "member" ? (
+                            {m.role === "member" && (
                               <Button
                                 size="icon"
                                 variant="ghost"
-                                title="Promote to leader"
-                                onClick={() => setRole(m, "leader")}
+                                title="Promote to co-leader"
+                                onClick={() => promoteToCoLeader(m)}
                               >
                                 <Shield className="h-4 w-4" />
                               </Button>
-                            ) : (
+                            )}
+                            {m.role === "co_leader" && (
                               <Button
                                 size="icon"
                                 variant="ghost"
                                 title="Demote to member"
-                                onClick={() => setRole(m, "member")}
+                                onClick={() => demoteToMember(m)}
                               >
                                 <ShieldOff className="h-4 w-4" />
                               </Button>
                             )}
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              title="Remove member"
-                              onClick={() => removeMember(m)}
-                            >
-                              <UserMinus className="h-4 w-4" />
-                            </Button>
+                            {isLeader && m.role !== "leader" && (
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                title="Transfer leadership"
+                                onClick={() => setTransferTarget(m)}
+                              >
+                                <Crown className="h-4 w-4" />
+                              </Button>
+                            )}
+                            {m.role !== "leader" && (
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                title="Remove member"
+                                onClick={() => removeMember(m)}
+                              >
+                                <UserMinus className="h-4 w-4" />
+                              </Button>
+                            )}
                           </div>
                         )}
                       </li>
