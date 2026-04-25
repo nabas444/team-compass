@@ -619,3 +619,6 @@ function TeamPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
