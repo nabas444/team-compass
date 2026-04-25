@@ -83,13 +83,14 @@ function generateCode(len = 8) {
 
 function TeamPage() {
   const { user } = useAuth();
-  const { currentGroup, isLeader, refresh } = useGroups();
+  const { currentGroup, isLeader, canManage, refresh } = useGroups();
   const [members, setMembers] = useState<Member[]>([]);
   const [invites, setInvites] = useState<Invite[]>([]);
   const [requests, setRequests] = useState<JoinRequest[]>([]);
   const [tasks, setTasks] = useState<TaskRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [assignOpen, setAssignOpen] = useState<{ userId: string; name: string } | null>(null);
+  const [transferTarget, setTransferTarget] = useState<Member | null>(null);
 
   const loadAll = useCallback(async () => {
     if (!currentGroup) return;
