@@ -315,7 +315,11 @@ function TeamPage() {
           <h2 className="text-2xl font-semibold tracking-tight">{currentGroup.name}</h2>
           <p className="text-sm text-muted-foreground">
             {members.length} member{members.length === 1 ? "" : "s"} ·{" "}
-            {isLeader ? "You are a leader of this group" : "You are a member"}
+            {isLeader
+              ? "You are the leader of this group"
+              : me?.role === "co_leader"
+                ? "You are a co-leader"
+                : "You are a member"}
           </p>
         </div>
         <Button variant="outline" size="sm" onClick={loadAll}>
