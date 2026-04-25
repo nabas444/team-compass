@@ -64,7 +64,7 @@ export function GroupsProvider({ children }: { children: ReactNode }) {
               id: row.groups.id,
               name: row.groups.name,
               description: row.groups.description,
-              role: row.role as "leader" | "member",
+              role: row.role as GroupRole,
             }
           : null,
       )
