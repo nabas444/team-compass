@@ -602,9 +602,10 @@ function TeamPage() {
           <DialogHeader>
             <DialogTitle>Transfer leadership?</DialogTitle>
             <DialogDescription>
-              {transferTarget?.profile?.name || transferTarget?.profile?.email} will become the
-              leader of <span className="font-medium">{currentGroup.name}</span>. You will be
-              demoted to co-leader. A group can only have one leader at a time.
+              {(transferTarget?.profile?.name || transferTarget?.profile?.email) ?? "This member"}
+              {" will become the leader of "}
+              {currentGroup.name}
+              {". You will be demoted to co-leader. A group can only have one leader at a time."}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
