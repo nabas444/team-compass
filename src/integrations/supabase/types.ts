@@ -831,7 +831,7 @@ export type Database = {
         | "message_sent"
         | "task_suggested"
         | "meeting_notes_created"
-      app_role: "leader" | "member"
+      app_role: "leader" | "member" | "co_leader"
       suggestion_status: "pending" | "accepted" | "dismissed"
       task_status: "not_started" | "in_progress" | "completed"
     }
@@ -973,7 +973,7 @@ export const Constants = {
         "task_suggested",
         "meeting_notes_created",
       ],
-      app_role: ["leader", "member"],
+      app_role: ["leader", "member", "co_leader"],
       suggestion_status: ["pending", "accepted", "dismissed"],
       task_status: ["not_started", "in_progress", "completed"],
     },
