@@ -10,18 +10,23 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 
+export type GroupRole = "leader" | "co_leader" | "member";
+
 export interface GroupSummary {
   id: string;
   name: string;
   description: string | null;
-  role: "leader" | "member";
+  role: GroupRole;
 }
 
 interface GroupsContextValue {
   groups: GroupSummary[];
   currentGroupId: string | null;
   currentGroup: GroupSummary | null;
+  /** True when the current user is the sole leader of the current group. */
   isLeader: boolean;
+  /** True when the current user has elevated permissions (leader OR co-leader). */
+  canManage: boolean;
   loading: boolean;
   error: string | null;
   switchGroup: (id: string) => void;
@@ -59,7 +64,7 @@ export function GroupsProvider({ children }: { children: ReactNode }) {
               id: row.groups.id,
               name: row.groups.name,
               description: row.groups.description,
-              role: row.role as "leader" | "member",
+              role: row.role as GroupRole,
             }
           : null,
       )
@@ -166,6 +171,7 @@ export function GroupsProvider({ children }: { children: ReactNode }) {
     currentGroupId,
     currentGroup,
     isLeader: currentGroup?.role === "leader",
+    canManage: currentGroup?.role === "leader" || currentGroup?.role === "co_leader",
     loading,
     error,
     switchGroup,

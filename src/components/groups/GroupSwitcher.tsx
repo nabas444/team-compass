@@ -98,7 +98,11 @@ export function GroupSwitcher() {
                   {currentGroup?.name ?? "No group"}
                 </p>
                 <p className="truncate text-[11px] text-muted-foreground">
-                  {currentGroup?.role === "leader" ? "Leader" : "Member"}
+                  {currentGroup?.role === "leader"
+                    ? "Leader"
+                    : currentGroup?.role === "co_leader"
+                      ? "Co-leader"
+                      : "Member"}
                 </p>
               </div>
             </div>

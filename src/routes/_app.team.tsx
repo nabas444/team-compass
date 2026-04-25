@@ -44,10 +44,12 @@ export const Route = createFileRoute("/_app/team")({
   component: TeamPage,
 });
 
+type Role = "leader" | "co_leader" | "member";
+
 interface Member {
   id: string;
   user_id: string;
-  role: "leader" | "member";
+  role: Role;
   created_at: string;
   profile: { name: string | null; email: string } | null;
 }
@@ -81,13 +83,14 @@ function generateCode(len = 8) {
 
 function TeamPage() {
   const { user } = useAuth();
-  const { currentGroup, isLeader, refresh } = useGroups();
+  const { currentGroup, isLeader, canManage, refresh } = useGroups();
   const [members, setMembers] = useState<Member[]>([]);
   const [invites, setInvites] = useState<Invite[]>([]);
   const [requests, setRequests] = useState<JoinRequest[]>([]);
   const [tasks, setTasks] = useState<TaskRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [assignOpen, setAssignOpen] = useState<{ userId: string; name: string } | null>(null);
+  const [transferTarget, setTransferTarget] = useState<Member | null>(null);
 
   const loadAll = useCallback(async () => {
     if (!currentGroup) return;
@@ -219,23 +222,65 @@ function TeamPage() {
   };
 
   // ---------- Member actions ----------
-  const setRole = async (member: Member, role: "leader" | "member") => {
-    if (member.role === "leader" && role === "member" && leaderCount <= 1) {
-      toast.error("There must be at least one leader");
+  const me = members.find((m) => m.user_id === user?.id) ?? null;
+
+  // Promote a member to co-leader (any leader/co-leader can do)
+  const promoteToCoLeader = async (member: Member) => {
+    const { error } = await supabase
+      .from("memberships")
+      .update({ role: "co_leader" })
+      .eq("id", member.id);
+    if (error) return toast.error(error.message);
+    toast.success(`${member.profile?.name || "Member"} is now a co-leader`);
+    loadAll();
+    refresh();
+  };
+
+  // Demote a co-leader back to member (leader/co-leader can do; cannot target the leader)
+  const demoteToMember = async (member: Member) => {
+    if (member.role === "leader") {
+      toast.error("Transfer leadership first");
       return;
     }
     const { error } = await supabase
       .from("memberships")
-      .update({ role })
+      .update({ role: "member" })
       .eq("id", member.id);
     if (error) return toast.error(error.message);
     toast.success(`Role updated`);
     loadAll();
     refresh();
   };
+
+  // Transfer leadership to another member: current leader becomes co-leader, target becomes leader.
+  // Only the current leader may do this.
+  const transferLeadership = async (target: Member) => {
+    if (!isLeader || !me) return toast.error("Only the leader can transfer leadership");
+    if (target.user_id === me.user_id) return;
+    // Step down current leader to co_leader first to avoid two leaders momentarily.
+    const { error: e1 } = await supabase
+      .from("memberships")
+      .update({ role: "co_leader" })
+      .eq("id", me.id);
+    if (e1) return toast.error(e1.message);
+    const { error: e2 } = await supabase
+      .from("memberships")
+      .update({ role: "leader" })
+      .eq("id", target.id);
+    if (e2) {
+      // Roll back
+      await supabase.from("memberships").update({ role: "leader" }).eq("id", me.id);
+      return toast.error(e2.message);
+    }
+    toast.success(`Leadership transferred to ${target.profile?.name || "member"}`);
+    setTransferTarget(null);
+    loadAll();
+    refresh();
+  };
+
   const removeMember = async (member: Member) => {
-    if (member.role === "leader" && leaderCount <= 1) {
-      toast.error("Promote another leader first");
+    if (member.role === "leader") {
+      toast.error("Transfer leadership before removing the leader");
       return;
     }
     if (!confirm(`Remove ${member.profile?.name || member.profile?.email} from the group?`)) return;
@@ -270,7 +315,11 @@ function TeamPage() {
           <h2 className="text-2xl font-semibold tracking-tight">{currentGroup.name}</h2>
           <p className="text-sm text-muted-foreground">
             {members.length} member{members.length === 1 ? "" : "s"} ·{" "}
-            {isLeader ? "You are a leader of this group" : "You are a member"}
+            {isLeader
+              ? "You are the leader of this group"
+              : me?.role === "co_leader"
+                ? "You are a co-leader"
+                : "You are a member"}
           </p>
         </div>
         <Button variant="outline" size="sm" onClick={loadAll}>
@@ -281,7 +330,7 @@ function TeamPage() {
       <Tabs defaultValue="members">
         <TabsList>
           <TabsTrigger value="members">Members</TabsTrigger>
-          {isLeader && (
+          {canManage && (
             <>
               <TabsTrigger value="requests">
                 Requests
@@ -327,11 +376,20 @@ function TeamPage() {
                             {m.profile?.email} · joined {format(new Date(m.created_at), "MMM d, yyyy")}
                           </p>
                         </div>
-                        <Badge variant={m.role === "leader" ? "default" : "secondary"}>
+                        <Badge
+                          variant={
+                            m.role === "leader"
+                              ? "default"
+                              : m.role === "co_leader"
+                                ? "outline"
+                                : "secondary"
+                          }
+                        >
                           {m.role === "leader" && <Crown className="mr-1 h-3 w-3" />}
-                          {m.role}
+                          {m.role === "co_leader" && <Shield className="mr-1 h-3 w-3" />}
+                          {m.role === "co_leader" ? "co-leader" : m.role}
                         </Badge>
-                        {isLeader && m.user_id !== user?.id && (
+                        {canManage && m.user_id !== user?.id && (
                           <div className="flex items-center gap-1">
                             <Button
                               size="sm"
@@ -342,33 +400,46 @@ function TeamPage() {
                             >
                               Assign task
                             </Button>
-                            {m.role === "member" ? (
+                            {m.role === "member" && (
                               <Button
                                 size="icon"
                                 variant="ghost"
-                                title="Promote to leader"
-                                onClick={() => setRole(m, "leader")}
+                                title="Promote to co-leader"
+                                onClick={() => promoteToCoLeader(m)}
                               >
                                 <Shield className="h-4 w-4" />
                               </Button>
-                            ) : (
+                            )}
+                            {m.role === "co_leader" && (
                               <Button
                                 size="icon"
                                 variant="ghost"
                                 title="Demote to member"
-                                onClick={() => setRole(m, "member")}
+                                onClick={() => demoteToMember(m)}
                               >
                                 <ShieldOff className="h-4 w-4" />
                               </Button>
                             )}
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              title="Remove member"
-                              onClick={() => removeMember(m)}
-                            >
-                              <UserMinus className="h-4 w-4" />
-                            </Button>
+                            {isLeader && m.role !== "leader" && (
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                title="Transfer leadership"
+                                onClick={() => setTransferTarget(m)}
+                              >
+                                <Crown className="h-4 w-4" />
+                              </Button>
+                            )}
+                            {m.role !== "leader" && (
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                title="Remove member"
+                                onClick={() => removeMember(m)}
+                              >
+                                <UserMinus className="h-4 w-4" />
+                              </Button>
+                            )}
                           </div>
                         )}
                       </li>
@@ -381,7 +452,7 @@ function TeamPage() {
         </TabsContent>
 
         {/* Requests */}
-        {isLeader && (
+        {canManage && (
           <TabsContent value="requests" className="mt-4">
             <Card>
               <CardHeader>
@@ -426,7 +497,7 @@ function TeamPage() {
         )}
 
         {/* Invites */}
-        {isLeader && (
+        {canManage && (
           <TabsContent value="invites" className="mt-4">
             <Card>
               <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0">
@@ -520,6 +591,30 @@ function TeamPage() {
           <DialogFooter>
             <Button variant="ghost" onClick={() => setAssignOpen(null)}>
               Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Transfer leadership confirm */}
+      <Dialog open={!!transferTarget} onOpenChange={(o) => !o && setTransferTarget(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Transfer leadership?</DialogTitle>
+            <DialogDescription>
+              {transferTarget?.profile?.name || transferTarget?.profile?.email} will become the
+              leader of <span className="font-medium">{currentGroup.name}</span>. You will be
+              demoted to co-leader. A group can only have one leader at a time.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setTransferTarget(null)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => transferTarget && transferLeadership(transferTarget)}
+            >
+              <Crown className="mr-2 h-4 w-4" /> Transfer leadership
             </Button>
           </DialogFooter>
         </DialogContent>
